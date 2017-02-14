@@ -1,17 +1,15 @@
 import psycopg2
-import psycopg2.pool
 import os
 
 from addok.config import config
 
 
 class PGStore:
-    cur = None
 
     def __init__(self, *args, **kwargs):
         with PGStore.conn() as conn:
             cur = conn.cursor()
-            cur.execute('CREATE TABLE IF NOT EXISTS '+config.PG_TABLE+' (key VARCHAR, data bytea)')
+            cur.execute('CREATE TABLE IF NOT EXISTS '+config.PG_TABLE+' (key VARCHAR COLLATE "C", data bytea)')
             cur.execute('CREATE UNIQUE INDEX IF NOT EXISTS '+config.PG_TABLE+'_key_idx ON '+config.PG_TABLE+' (key)')
             conn.commit()
 
