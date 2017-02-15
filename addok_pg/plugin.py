@@ -32,7 +32,6 @@ class PGStore:
             cur = conn.cursor()
             params = ','.join(cur.mogrify("'%s'" % k).decode("utf-8") for k in keys)
             query = 'SELECT key, data FROM '+config.PG_TABLE+' WHERE key IN ('+params+')'
-            print(query)
             cur.execute(query)
             for key, data in cur.fetchall():
                 yield key.encode(), data
