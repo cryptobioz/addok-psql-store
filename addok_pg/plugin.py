@@ -1,53 +1,66 @@
-import psycopg2
-import psycopg2.pool
-import os
+from psycopg2 import connect
 
 from addok.config import config
 
 
 class PGStore:
     def __init__(self, *args, **kwargs):
-        self.pg = psycopg2.pool.PersistentConnectionPool(8,64,config.PG_CONFIG)
-        with self.pg.getconn() as conn:
-            cur = conn.cursor()
-            cur.execute('CREATE TABLE IF NOT EXISTS '+config.PG_TABLE+' (key VARCHAR COLLATE "C", data bytea)')
-            cur.execute('CREATE UNIQUE INDEX IF NOT EXISTS '+config.PG_TABLE+'_key_idx ON '+config.PG_TABLE+' (key)')
-            conn.commit()
-            self.pg.putconn(conn)
-
-    def flushdb(self):
-        with PGStore.conn() as conn:
-            cur = conn.cursor()
-            cur.execute('DROP TABLE IF EXISTS '+config.PG_TABLE)
-            conn.commit()
-
-    def conn():
-        return(psycopg2.connect(config.PG_CONFIG))
+        self.conn = connect(config.PG_CONFIG)
+        create_table_query = '''
+        CREATE TABLE IF NOT EXISTS
+            {PG_TABLE} (key VARCHAR COLLATE "C", data bytea)
+        '''.format(**config)
+        create_index_query = '''
+        CREATE UNIQUE INDEX IF NOT EXISTS
+            {PG_TABLE}_key_idx ON {PG_TABLE} (key)
+        '''.format(**config)
+        with self.conn.cursor() as curs:
+            curs.execute(create_table_query)
+            curs.execute(create_index_query)
+        self.conn.commit()
 
     def fetch(self, *keys):
-        if not keys:  # Avoid invalid SQL.
-            return
-        keys = [key.decode() for key in keys]
-        with self.pg.getconn() as conn:
-            cur = conn.cursor()
-            params = ','.join(cur.mogrify("'%s'" % k).decode("utf-8") for k in keys)
-            query = 'SELECT key, data FROM '+config.PG_TABLE+' WHERE key IN ('+params+')'
-            cur.execute(query)
-            for key, data in cur.fetchall():
+        # Using ANY results in valid SQL if `keys` is empty.
+        select_query = '''
+        SELECT key, data FROM {PG_TABLE}
+            WHERE key=ANY(%s)
+        '''.format(**config)
+        with self.conn.cursor() as curs:
+            curs.execute(select_query, ([key.decode() for key in keys],))
+            for key, data in curs.fetchall():
                 yield key.encode(), data
-            self.pg.putconn(conn)
 
     def upsert(self, *docs):
-        with PGStore.conn() as conn:
-            cur = conn.cursor()
-            values = ','.join(cur.mogrify("(%s,%s)", d).decode("utf-8") for d in docs)
-            cur.execute('INSERT INTO '+config.PG_TABLE+' (key,data) VALUES ' + values + ' ON CONFLICT DO NOTHING')
-            conn.commit()
+        """
+        Once psycopg2.7 is released, switch to `extras.execute_values`
+        which avoids the template dance.
+
+        Potential performance boost, using copy_from:
+        * https://gist.github.com/jsheedy/efa9a69926a754bebf0e9078fd085df6
+        * https://gist.github.com/jsheedy/ed81cdf18190183b3b7d
+
+        Or event copy_expert for mixed binary content:
+        * http://stackoverflow.com/a/8150329
+        """
+        insert_into = '''
+        INSERT INTO {PG_TABLE} (key, data) VALUES {template}
+            ON CONFLICT DO NOTHING
+        '''.format(template=','.join(['%s'] * len(docs)), **config)
+        with self.conn.cursor() as curs:
+            curs.execute(insert_into, docs)
+        self.conn.commit()
 
     def remove(self, *keys):
-        with PGStore.conn() as conn:
-            conn.cursor().executemany('DELETE FROM '+config.PG_TABLE+' WHERE key=%s', (keys, ))
-            conn.commit()
+        delete_from = 'DELETE FROM {PG_TABLE} WHERE key=%s'.format(**config)
+        with self.conn.cursor() as curs:
+            curs.executemany(delete_from, (keys, ))
+        self.conn.commit()
+
+    def flushdb(self):
+        drop_table = 'DROP TABLE IF EXISTS {PG_TABLE}'.format(**config)
+        with self.conn.cursor() as curs:
+            curs.execute(drop_table)
+        self.conn.commit()
 
 
 def preconfigure(config):
