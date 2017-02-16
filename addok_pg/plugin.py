@@ -22,8 +22,7 @@ class PGStore:
     def fetch(self, *keys):
         # Using ANY results in valid SQL if `keys` is empty.
         select_query = '''
-        SELECT key, data FROM {PG_TABLE}
-            WHERE key=ANY(%s)
+        SELECT key, data FROM {PG_TABLE} WHERE key=ANY(%s)
         '''.format(**config)
         with self.conn.cursor() as curs:
             curs.execute(select_query, ([key.decode() for key in keys],))
@@ -42,24 +41,28 @@ class PGStore:
         Or event copy_expert for mixed binary content:
         * http://stackoverflow.com/a/8150329
         """
-        insert_into = '''
+        insert_into_query = '''
         INSERT INTO {PG_TABLE} (key, data) VALUES {template}
             ON CONFLICT DO NOTHING
         '''.format(template=','.join(['%s'] * len(docs)), **config)
         with self.conn.cursor() as curs:
-            curs.execute(insert_into, docs)
+            curs.execute(insert_into_query, docs)
         self.conn.commit()
 
     def remove(self, *keys):
-        delete_from = 'DELETE FROM {PG_TABLE} WHERE key=%s'.format(**config)
+        delete_from_query = '''
+        DELETE FROM {PG_TABLE} WHERE key=%s
+        '''.format(**config)
         with self.conn.cursor() as curs:
-            curs.executemany(delete_from, (keys, ))
+            curs.executemany(delete_from_query, (keys, ))
         self.conn.commit()
 
     def flushdb(self):
-        drop_table = 'DROP TABLE IF EXISTS {PG_TABLE}'.format(**config)
+        drop_table_query = '''
+        DROP TABLE IF EXISTS {PG_TABLE}
+        '''.format(**config)
         with self.conn.cursor() as curs:
-            curs.execute(drop_table)
+            curs.execute(drop_table_query)
         self.conn.commit()
 
 
