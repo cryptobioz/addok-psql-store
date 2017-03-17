@@ -1,4 +1,5 @@
 from psycopg2 import connect
+from psycopg2.extras import execute_values
 
 from addok.config import config
 
@@ -31,9 +32,6 @@ class PGStore:
 
     def upsert(self, *docs):
         """
-        Once psycopg2.7 is released, switch to `extras.execute_values`
-        which avoids the template dance.
-
         Potential performance boost, using copy_from:
         * https://gist.github.com/jsheedy/efa9a69926a754bebf0e9078fd085df6
         * https://gist.github.com/jsheedy/ed81cdf18190183b3b7d
@@ -42,11 +40,11 @@ class PGStore:
         * http://stackoverflow.com/a/8150329
         """
         insert_into_query = '''
-        INSERT INTO {PG_TABLE} (key, data) VALUES {template}
+        INSERT INTO {PG_TABLE} (key, data) VALUES %s
             ON CONFLICT DO NOTHING
-        '''.format(template=','.join(['%s'] * len(docs)), **config)
+        '''.format(**config)
         with self.conn.cursor() as curs:
-            curs.execute(insert_into_query, docs)
+            execute_values(curs, insert_into_query, docs)
         self.conn.commit()
 
     def remove(self, *keys):
