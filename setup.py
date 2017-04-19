@@ -11,11 +11,11 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    name='addok-pg',
+    name='addok-psql-store',
     version=".".join(map(str, VERSION)),
     description="Store documents in postgresql.",
     long_description=long_description,
-    url='https://github.com/addok/addok-pg',
+    url='https://github.com/addok/addok-psql-store',
     author='Christian Quest',
     author_email='christian.quest@data.gouv.fr',
     license='WTFPL',
@@ -36,5 +36,5 @@ setup(
     packages=find_packages(exclude=['tests']),
     extras_require={'test': ['pytest']},
     include_package_data=True,
-    entry_points={'addok.ext': ['postgresql=addok_pg.plugin']},
+    entry_points={'addok.ext': ['psql-store=addok_psql_store']},
 )
