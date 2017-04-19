@@ -4,7 +4,7 @@ from psycopg2.extras import execute_values
 from addok.config import config
 
 
-class PGStore:
+class PSQLStore:
     def __init__(self, *args, **kwargs):
         self.conn = connect(config.PG_CONFIG)
         create_table_query = '''
@@ -65,6 +65,6 @@ class PGStore:
 
 
 def preconfigure(config):
-    config.DOCUMENT_STORE_PYPATH = 'addok_pg.plugin.PGStore'
+    config.DOCUMENT_STORE_PYPATH = 'addok_psql_store.PSQLStore'
     config.PG_CONFIG = 'dbname=addok user=addok host=localhost password=addok'
     config.PG_TABLE = 'addok'
