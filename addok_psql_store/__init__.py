@@ -1,4 +1,4 @@
-from psycopg2 import connect
+from psycopg2 import pool
 from psycopg2.extras import execute_values
 
 from addok.config import config
@@ -6,7 +6,8 @@ from addok.config import config
 
 class PSQLStore:
     def __init__(self, *args, **kwargs):
-        self.conn = connect(config.PG_CONFIG)
+        self.pool = pool.SimpleConnectionPool(minconn=8, maxconn=64,
+                                              dsn=config.PG_CONFIG)
         create_table_query = '''
         CREATE TABLE IF NOT EXISTS
             {PG_TABLE} (key VARCHAR COLLATE "C", data bytea)
@@ -15,17 +16,16 @@ class PSQLStore:
         CREATE UNIQUE INDEX IF NOT EXISTS
             {PG_TABLE}_key_idx ON {PG_TABLE} (key)
         '''.format(**config)
-        with self.conn.cursor() as curs:
+        with self.pool.getconn() as conn, conn.cursor() as curs:
             curs.execute(create_table_query)
             curs.execute(create_index_query)
-        self.conn.commit()
 
     def fetch(self, *keys):
         # Using ANY results in valid SQL if `keys` is empty.
         select_query = '''
         SELECT key, data FROM {PG_TABLE} WHERE key=ANY(%s)
         '''.format(**config)
-        with self.conn.cursor() as curs:
+        with self.pool.getconn() as conn, conn.cursor() as curs:
             curs.execute(select_query, ([key.decode() for key in keys],))
             for key, data in curs.fetchall():
                 yield key.encode(), data
@@ -43,25 +43,22 @@ class PSQLStore:
         INSERT INTO {PG_TABLE} (key, data) VALUES %s
             ON CONFLICT DO NOTHING
         '''.format(**config)
-        with self.conn.cursor() as curs:
+        with self.pool.getconn() as conn, conn.cursor() as curs:
             execute_values(curs, insert_into_query, docs)
-        self.conn.commit()
 
     def remove(self, *keys):
         delete_from_query = '''
         DELETE FROM {PG_TABLE} WHERE key=%s
         '''.format(**config)
-        with self.conn.cursor() as curs:
+        with self.pool.getconn() as conn, conn.cursor() as curs:
             curs.executemany(delete_from_query, (keys, ))
-        self.conn.commit()
 
     def flushdb(self):
         drop_table_query = '''
         DROP TABLE IF EXISTS {PG_TABLE}
         '''.format(**config)
-        with self.conn.cursor() as curs:
+        with self.pool.getconn() as conn, conn.cursor() as curs:
             curs.execute(drop_table_query)
-        self.conn.commit()
 
 
 def preconfigure(config):
