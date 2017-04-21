@@ -23,6 +23,8 @@ class PSQLStore:
             curs.execute(create_index_query)
 
     def getconn(self):
+        # Use pid as connection id so we can reuse the connection within the
+        # same process.
         return self.pool.getconn(key=os.getpid())
 
     def fetch(self, *keys):
