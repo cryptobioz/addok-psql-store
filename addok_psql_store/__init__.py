@@ -1,3 +1,5 @@
+import os
+
 from psycopg2 import pool
 from psycopg2.extras import execute_values
 
@@ -16,16 +18,19 @@ class PSQLStore:
         CREATE UNIQUE INDEX IF NOT EXISTS
             {PG_TABLE}_key_idx ON {PG_TABLE} (key)
         '''.format(**config)
-        with self.pool.getconn() as conn, conn.cursor() as curs:
+        with self.getconn() as conn, conn.cursor() as curs:
             curs.execute(create_table_query)
             curs.execute(create_index_query)
+
+    def getconn(self):
+        return self.pool.getconn(key=os.getpid())
 
     def fetch(self, *keys):
         # Using ANY results in valid SQL if `keys` is empty.
         select_query = '''
         SELECT key, data FROM {PG_TABLE} WHERE key=ANY(%s)
         '''.format(**config)
-        with self.pool.getconn() as conn, conn.cursor() as curs:
+        with self.getconn() as conn, conn.cursor() as curs:
             curs.execute(select_query, ([key.decode() for key in keys],))
             for key, data in curs.fetchall():
                 yield key.encode(), data
@@ -43,21 +48,21 @@ class PSQLStore:
         INSERT INTO {PG_TABLE} (key, data) VALUES %s
             ON CONFLICT DO NOTHING
         '''.format(**config)
-        with self.pool.getconn() as conn, conn.cursor() as curs:
+        with self.getconn() as conn, conn.cursor() as curs:
             execute_values(curs, insert_into_query, docs)
 
     def remove(self, *keys):
         delete_from_query = '''
         DELETE FROM {PG_TABLE} WHERE key=%s
         '''.format(**config)
-        with self.pool.getconn() as conn, conn.cursor() as curs:
+        with self.getconn() as conn, conn.cursor() as curs:
             curs.executemany(delete_from_query, (keys, ))
 
     def flushdb(self):
         drop_table_query = '''
         DROP TABLE IF EXISTS {PG_TABLE}
         '''.format(**config)
-        with self.pool.getconn() as conn, conn.cursor() as curs:
+        with self.getconn() as conn, conn.cursor() as curs:
             curs.execute(drop_table_query)
 
 
