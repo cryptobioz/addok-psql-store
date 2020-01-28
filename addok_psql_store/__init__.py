@@ -1,6 +1,6 @@
 import os
 
-from psycopg2 import pool
+from psycopg2 import pool, OperationalError
 from psycopg2.extras import execute_values
 
 from addok.config import config
@@ -25,7 +25,14 @@ class PSQLStore:
     def getconn(self):
         # Use pid as connection id so we can reuse the connection within the
         # same process.
-        return self.pool.getconn(key=os.getpid())
+        conn = self.pool.getconn(key=os.getpid())
+        try:
+            c = conn.cursor()
+        except OperationalError as err:
+            self.pool = pool.SimpleConnectionPool(minconn=8, maxconn=64,
+                                              dsn=config.PG_CONFIG)
+            conn = self.pool.getconn(key=os.getpid())
+        return conn
 
     def fetch(self, *keys):
         # Using ANY results in valid SQL if `keys` is empty.
