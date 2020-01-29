@@ -21,16 +21,22 @@ class PSQLStore:
         with self.getconn() as conn, conn.cursor() as curs:
             curs.execute(create_table_query)
             curs.execute(create_index_query)
+        self.pool = None
+
+    def create_pool(self):
+        self.pool = pool.SimpleConnectionPool(minconn=8, maxconn=64,
+                                                dsn=config.PG_CONFIG)
+        print("######## NEW POOL #########")
 
     def getconn(self):
-        # Use pid as connection id so we can reuse the connection within the
-        # same process.
+        if self.pool is None:
+            self.create_pool()
+
         conn = self.pool.getconn(key=os.getpid())
         try:
             c = conn.cursor()
         except OperationalError as err:
-            self.pool = pool.SimpleConnectionPool(minconn=8, maxconn=64,
-                                              dsn=config.PG_CONFIG)
+            self.create_pool()
             conn = self.pool.getconn(key=os.getpid())
         return conn
 
