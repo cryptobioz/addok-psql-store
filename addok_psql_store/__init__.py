@@ -8,7 +8,7 @@ from addok.config import config
 
 class PSQLStore:
     def __init__(self, *args, **kwargs):
-        self.pool = pool.SimpleConnectionPool(minconn=8, maxconn=64,
+        self.pool = pool.SimpleConnectionPool(minconn=1, maxconn=5,
                                               dsn=config.PG_CONFIG)
         create_table_query = '''
         CREATE TABLE IF NOT EXISTS
@@ -24,7 +24,7 @@ class PSQLStore:
         self.pool = None
 
     def create_pool(self):
-        self.pool = pool.SimpleConnectionPool(minconn=8, maxconn=64,
+        self.pool = pool.SimpleConnectionPool(minconn=1, maxconn=5,
                                                 dsn=config.PG_CONFIG)
         print("######## NEW POOL #########")
 
