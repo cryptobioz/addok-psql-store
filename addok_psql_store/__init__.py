@@ -1,7 +1,7 @@
 import os
 
 from psycopg2 import pool, OperationalError, InterfaceError
-from psycopg2.extras import execute_values
+from psycopg2.extras import execute_values, execute_batch
 
 from addok.config import config
 
@@ -60,11 +60,12 @@ class PSQLStore:
             execute_values(curs, insert_into_query, docs)
 
     def remove(self, *keys):
+        keys = [(key,) for key in keys]
         delete_from_query = '''
         DELETE FROM {PG_TABLE} WHERE key=%s
         '''.format(**config)
         with self.getconn() as conn, conn.cursor() as curs:
-            curs.executemany(delete_from_query, (keys, ))
+            execute_batch(curs, delete_from_query, keys)
 
     def flushdb(self):
         drop_table_query = '''
