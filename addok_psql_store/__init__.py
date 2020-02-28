@@ -1,4 +1,5 @@
 import os
+from pgcopy import CopyManager
 
 from psycopg2 import pool, OperationalError, InterfaceError
 from psycopg2.extras import execute_values
@@ -45,19 +46,24 @@ class PSQLStore:
 
     def upsert(self, *docs):
         """
-        Potential performance boost, using copy_from:
-        * https://gist.github.com/jsheedy/efa9a69926a754bebf0e9078fd085df6
-        * https://gist.github.com/jsheedy/ed81cdf18190183b3b7d
-
-        Or event copy_expert for mixed binary content:
-        * http://stackoverflow.com/a/8150329
+        Use copy_from to load the binary data into db, in case of conflicts,
+        we switch to execute_values, with "ON CONFLICT DO NOTHING" only the
+        failing row will be ignored instead of the whole chunk (docs)
+        :param docs:
+        :return:
         """
-        insert_into_query = '''
-        INSERT INTO {PG_TABLE} (key, data) VALUES %s
-            ON CONFLICT DO NOTHING
-        '''.format(**config)
         with self.getconn() as conn, conn.cursor() as curs:
-            execute_values(curs, insert_into_query, docs)
+            mgr = CopyManager(conn, '{PG_TABLE}'.format(**config), ['key', 'data'])
+            try:
+                mgr.copy(docs) # will raise error if key exists
+            except:
+                insert_into_query = '''
+                INSERT INTO {PG_TABLE} (key, data) VALUES %s
+                ON CONFLICT DO NOTHING
+                '''.format(**config)
+                execute_values(curs, insert_into_query, docs)
+            else:
+                conn.commit()
 
     def remove(self, *keys):
         delete_from_query = '''
