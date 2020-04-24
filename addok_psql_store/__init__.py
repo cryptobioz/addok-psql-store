@@ -1,15 +1,23 @@
 import os
+import pkg_resources
 
 from psycopg2 import pool, OperationalError, InterfaceError
 from psycopg2.extras import execute_values, execute_batch
+from prometheus_client import Gauge, Info
 
 from addok.config import config
 
+version = pkg_resources.require("addok-psql-store")[0].version
 
 class PSQLStore:
     def __init__(self, *args, **kwargs):
         self.pool = pool.SimpleConnectionPool(minconn=1, maxconn=2,
                                               dsn=config.PG_CONFIG)
+        self.metrics_catalog = {
+            "build_info": Info('addok_plugin_addok_psql_store', 'Build info of Addok plugin addok_psql_store'),
+            "total_records": Gauge('addok_total_records', 'Total count of Addok records'),
+        }
+
         create_table_query = '''
         CREATE TABLE IF NOT EXISTS
             {PG_TABLE} (key VARCHAR COLLATE "C", data bytea)
@@ -58,6 +66,7 @@ class PSQLStore:
         '''.format(**config)
         with self.getconn() as conn, conn.cursor() as curs:
             execute_values(curs, insert_into_query, docs)
+        
 
     def remove(self, *keys):
         keys = [(key,) for key in keys]
@@ -73,6 +82,15 @@ class PSQLStore:
         '''.format(**config)
         with self.getconn() as conn, conn.cursor() as curs:
             curs.execute(drop_table_query)
+
+    def metrics(self):
+        self.metrics_catalog["build_info"].info({'version': version})
+
+        select_query = "SELECT COUNT(*) FROM {PG_TABLE}".format(**config)
+        with self.getconn() as conn, conn.cursor() as curs:
+            curs.execute(select_query)
+            records = curs.fetchall()
+            self.metrics_catalog["total_records"].set(records[0][0])
 
 
 def preconfigure(config):
