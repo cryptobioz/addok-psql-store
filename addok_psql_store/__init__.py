@@ -47,7 +47,7 @@ class PSQLStore:
         SELECT key, data FROM {PG_TABLE} WHERE key=ANY(%s)
         '''.format(**config)
         with self.getconn() as conn, conn.cursor() as curs:
-            curs.execute(select_query, ([key.decode() for key in keys],))
+            curs.execute(select_query, ([key.decode() if isinstance(key, (bytes, bytearray)) else key for key in keys],))
             for key, data in curs.fetchall():
                 yield key.encode(), data
 
